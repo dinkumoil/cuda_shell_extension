@@ -133,7 +133,7 @@ begin
   if (idCmd = 0) and (uFlags = GCS_HELPTEXT) then
   begin
     StrLCopy(PChar(pszName),
-             PChar('Open selected file with CudaText'),
+             PChar('Edit selected file(s) with CudaText'),
              cchMax);
 
     Result := NOERROR;
@@ -172,6 +172,7 @@ end;
 function TCudaTextContextMenuHandler.QueryContextMenu(Menu: HMENU;
   indexMenu, idCmdFirst, idCmdLast, uFlags: UINT): HResult;
 const
+  CMF_ITEMMENU     = $00000080;
   MENU_ITEM_CAPTON = 'Edit with CudaText';
 
 var
@@ -187,6 +188,9 @@ begin
 
   // specify what the menu says, depending on where it was spawned
   if (uFlags = CMF_NORMAL) then // from the desktop
+    MenuCaption := MENU_ITEM_CAPTON
+
+  else if (uFlags and CMF_ITEMMENU) = CMF_ITEMMENU  then  // from desktop
     MenuCaption := MENU_ITEM_CAPTON
 
   else if (uFlags and CMF_VERBSONLY) = CMF_VERBSONLY then // from a shortcut
