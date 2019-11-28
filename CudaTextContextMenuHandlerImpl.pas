@@ -77,7 +77,7 @@ uses
 { ============================================================================ }
 function TCudaTextContextMenuHandler.Execute(Handle: HWND; const AFile: string; var Params: string): boolean;
 var
-  si: TStartupInfo;
+  si: Windows.TStartupInfoW;
   pi: TProcessInformation;
 
 begin
@@ -90,8 +90,14 @@ begin
   si.dwFlags     := STARTF_USESHOWWINDOW;
   si.wShowWindow := SW_SHOWNORMAL;
 
-  if not CreateProcess(nil, PChar(Format('"%s" %s', [AFile, Params])), nil, nil,
-                       false, CREATE_DEFAULT_ERROR_MODE, nil, PChar(ExtractFileDir(AFile)), si, pi) then
+  if not CreateProcessW(nil,
+                       PWideChar('"'+UTF8Decode(AFile)+'" '+UTF8Decode(Params)),
+                       nil, nil,
+                       false,
+                       CREATE_DEFAULT_ERROR_MODE,
+                       nil,
+                       PWideChar(UTF8Decode(ExtractFileDir(AFile))),
+                       si, pi) then
     MessageBox(Handle, PChar(SysErrorMessage(GetLastError())), nil, MB_ICONERROR)
   else
     Result := true;
@@ -226,8 +232,8 @@ var
   StrgMedium: TStgMedium;
   CntFiles:   UINT;
   Idx:        UINT;
-  Buffer:     array[0..MAX_PATH] of Char;
-  FileName:   string;
+  Buffer:     array[0..MAX_PATH] of WideChar;
+  FileName:   WideString;
 
 begin
   Result := E_FAIL;
@@ -254,9 +260,10 @@ begin
 
     for Idx := 0 to Pred(CntFiles) do
     begin
-      DragQueryFile(StrgMedium.hGlobal, Idx, @Buffer, SizeOf(Buffer));
-      SetString(FileName, Buffer, Min(StrLen(Buffer), Pred(SizeOf(Buffer))));
-      FFileNames.Add(FileName);
+      FillChar(Buffer, SizeOf(Buffer), 0);
+      DragQueryFileW(StrgMedium.hGlobal, Idx, @Buffer, MAX_PATH);
+      FileName := PWideChar(Buffer);
+      FFileNames.Add(UTF8Encode(FileName));
     end;
 
     Result := NOERROR;
