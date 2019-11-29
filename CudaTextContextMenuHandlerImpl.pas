@@ -139,7 +139,7 @@ begin
   if (idCmd = 0) and (uFlags = GCS_HELPTEXT) then
   begin
     StrLCopy(PChar(pszName),
-             PChar('Edit selected file(s) with CudaText'),
+             PChar('Open selected file(s) with CudaText'),
              cchMax);
 
     Result := NOERROR;
@@ -179,7 +179,7 @@ function TCudaTextContextMenuHandler.QueryContextMenu(Menu: HMENU;
   indexMenu, idCmdFirst, idCmdLast, uFlags: UINT): HResult;
 const
   CMF_ITEMMENU     = $00000080;
-  MENU_ITEM_CAPTON = 'Edit with CudaText';
+  MENU_ITEM_CAPTON = 'Open with CudaText';
 
 var
   ContextMenuItem: TMenuItemInfo;
