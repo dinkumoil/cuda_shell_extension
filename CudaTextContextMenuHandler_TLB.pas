@@ -93,9 +93,9 @@ type
 
 
 // *********************************************************************//
-// The Class CoCudaTextContextMenuHandler_ provides a Create and CreateRemote method to
+// The Class CoCudaTextContextMenuHandler provides a Create and CreateRemote method to
 // create instances of the default interface ICudaTextContextMenuHandler exposed by
-// the CoClass CudaTextContextMenuHandler_. The functions are intended to be used by
+// the CoClass CudaTextContextMenuHandler. The functions are intended to be used by
 // clients wishing to automate the CoClass objects exposed by the
 // server of this typelibrary.
 // *********************************************************************//

@@ -18,7 +18,7 @@
     <VersionInfo>
       <UseVersionInfo Value="True"/>
       <MajorVersionNr Value="1"/>
-      <StringTable Comments="CudaText context menu handler for Windows Explorer" CompanyName="UVviewSoft" ProductName="CudaText Shell Handler" ProductVersion="1.0.0.0"/>
+      <StringTable CompanyName="UVviewsoft" FileDescription="CudaText context menu handler for Windows Explorer" LegalCopyright="(c) 2019 Andreas Heim" ProductName="CudaText shell context menu handler" ProductVersion="1.0.0.0"/>
     </VersionInfo>
     <BuildModes>
       <Item Name="Default" Default="True"/>

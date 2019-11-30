@@ -29,7 +29,7 @@ call :CheckForAdminPermissions || (
 regsvr32 /s "%CD%\%ShellHandler%"
 
 ::Clean up
-del "%ElevateScript%" > NUL 2>&1
+del "%ElevateScript%" 1>NUL 2>&1
 
 
 ::------------------------------------------------------------------------------
@@ -53,12 +53,22 @@ exit /b 0
 
 
 :RestartElevated
+  ::Get system's ANSI and OEM code page and set console's code page to ANSI code page.
+  ::This is required if this script is stored in a path that contains characters
+  ::with different code points in those code pages.
+  for /f "tokens=2 delims==" %%a in ('wmic OS get CodeSet /format:list') do set /a "ACP=%%~a"
+  for /f "tokens=2 delims=.:" %%a in ('chcp') do set /a "OEMCP=%%a"
+  if "%ACP%" neq "" if "%ACP%" neq "0" chcp %ACP% > NUL
+
   > "%ElevateScript%" echo.Set objShell = CreateObject("Shell.Application")
   >>"%ElevateScript%" echo.
   >>"%ElevateScript%" echo.strApplication = "cmd.exe"
   >>"%ElevateScript%" echo.strArguments   = "/c """"%~1"" %~2"""
   >>"%ElevateScript%" echo.
   >>"%ElevateScript%" echo.objShell.ShellExecute strApplication, strArguments, "", "runas", 1
+
+  ::Restore OEM code page
+  if "%OEMCP%" neq "" if "%OEMCP%" neq "0" chcp %OEMCP% > NUL
 
   cscript /nologo "%ElevateScript%"
 exit /b 0
