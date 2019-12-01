@@ -4,6 +4,8 @@ Builds for 32 and 64 bit Windows available
 
 Author: Andreas Heim, 2019
 
+Developed with _Lazarus_ IDE and _Free Pascal Compiler_.
+
 
 # Features
 
