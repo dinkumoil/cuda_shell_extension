@@ -18,8 +18,8 @@ The context menu extension has to be installed via `regsvr32.exe` which requires
 
 The scripts try to automate the whole process of installing/uninstalling by requesting administrator permissions. If automatic installation/uninstallation fails, run the following commands from a console window that has been started via `Run as administrator`:
 
-**Installation:** `regsvr32 "<path-to-DLL-file>`
+**Installation:** `regsvr32 "<path-to-DLL-file>"`
 
-**Uninstallation:** `regsvr32 /u "<path-to-DLL-file>`
+**Uninstallation:** `regsvr32 /u "<path-to-DLL-file>"`
 
 After uninstalling the context menu extension you won't be able to immediatly delete its DLL file. To do so you have to kill all `explorer.exe` processes in Windows Taskmanager and restart Explorer via `(menu) File -> New task`.
