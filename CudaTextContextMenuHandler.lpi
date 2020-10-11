@@ -18,7 +18,8 @@
     <VersionInfo>
       <UseVersionInfo Value="True"/>
       <MajorVersionNr Value="1"/>
-      <StringTable CompanyName="UVviewsoft" FileDescription="CudaText context menu handler for Windows Explorer" LegalCopyright="(c) 2019 Andreas Heim" ProductName="CudaText shell context menu handler" ProductVersion="1.0.0.0"/>
+      <MinorVersionNr Value="1"/>
+      <StringTable CompanyName="UVviewsoft" FileDescription="CudaText context menu handler for Windows Explorer" LegalCopyright="(c) 2019-2020 Andreas Heim" ProductName="CudaText shell context menu handler" ProductVersion="1.1.0.0"/>
     </VersionInfo>
     <BuildModes>
       <Item Name="Default" Default="True"/>
@@ -30,6 +31,7 @@
             <Filename Value="bin\cudatext_shell32.dll"/>
           </Target>
           <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Parsing>
@@ -105,10 +107,10 @@
     <RunParams>
       <FormatVersion Value="2"/>
     </RunParams>
-    <RequiredPackages Count="1">
-      <Item1>
+    <RequiredPackages>
+      <Item>
         <PackageName Value="LCL"/>
-      </Item1>
+      </Item>
     </RequiredPackages>
     <Units>
       <Unit>
