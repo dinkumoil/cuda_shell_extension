@@ -2,10 +2,12 @@
 //
 // CudaText context menu handler for Windows Explorer
 //
-// Author: Andreas Heim, 2019
+// Version: 1.1
+// Author:  Andreas Heim, 2019-2020
+// Website: https://github.com/dinkumoil/cuda_shell_extension
 //
 //
-// The following web sites provided great help to get this piece of software
+// The following websites provided great help to get this piece of software
 // working:
 //
 // The basics (integrating an entry into the Explorer context menu):
@@ -40,6 +42,19 @@ uses
   CudaTextContextMenuHandler_TLB;
 
 
+const
+{ ============================================================================ }
+{ Missing constants                                                            }
+{ ============================================================================ }
+
+  CMF_ITEMMENU          = $00000080;
+  CMF_DISABLEDVERBS     = $00000200;
+  CMF_ASYNCVERBSTATE    = $00000400;
+  CMF_OPTIMIZEFORINVOKE = $00000800;
+  CMF_SYNCCASCADEMENU   = $00001000;
+  CMF_DONOTPICKDEFAULT  = $00002000;
+
+
 type
 { ============================================================================ }
 { Missing types                                                                }
@@ -66,16 +81,16 @@ type
 
   TCudaTextContextMenuHandler = class(TAutoObject, ICudaTextContextMenuHandler, IShellExtInit, IContextMenu, IContextMenu2, IContextMenu3)
   private
-    FMenuItemIndex: UINT;
-    FCudaTextPath:  string;
-    FFileNames:     TStringList;
+    FStatusbarMessage: string;
+    FCudaTextPath:     string;
+    FFileNames:        TStringList;
 
     pfnGetBufferedPaintBits: TGetBufferedPaintBits;
     pfnBeginBufferedPaint:   TBeginBufferedPaint;
     pfnEndBufferedPaint:     TEndBufferedPaint;
 
-    procedure OpenWithCudaText(Handle: HWND; FileNames: TStrings);
-    function  Execute(Handle: HWND; const AFile: string; var Params: string): boolean;
+    procedure OpenWithCudaText(Handle: HWND; SW_Mode: longint; FileNames: TStrings);
+    function  Execute(Handle: HWND; SW_Mode: longint; const AFile: string; var Params: string): boolean;
 
     procedure InitUXThemeFuncs;
     function  IconToBitmapPARGB32(const FilePath: string): HBITMAP;
@@ -105,12 +120,12 @@ type
     function QueryContextMenu(Menu: HMENU; indexMenu, idCmdFirst, idCmdLast,
       uFlags: UINT): HRESULT; stdcall;
 
-    // Execute the command, which will be opening a file in CudaText
-    function InvokeCommand(var lpici: TCMInvokeCommandInfo): HRESULT; stdcall;
-
     // Set help string on the Explorer status bar when the menu item is selected
     function GetCommandString(idCmd: UINT_PTR; uFlags: UINT; pwReserved: PUINT;
       pszName: LPSTR; cchMax: UINT): HRESULT; stdcall;
+
+    // Execute the command, which will be opening a file in CudaText
+    function InvokeCommand(var lpici: TCMInvokeCommandInfo): HRESULT; stdcall;
 
     { ------------------------------------------------------------------------ }
     { IContextMenu2 Methods                                                    }
@@ -145,10 +160,22 @@ uses
   SysUtils, Graphics, ComServ;
 
 
+const
+  // Context menu entry text
+  MENU_ITEM_CAPTON = 'Open with CudaText';
+
+  // Text to show in Explorer window status bar
+  // when hovering over context menu entry
+  STATUS_BAR_MSG_ITEM      = 'Open selected item(s) with CudaText';
+  STATUS_BAR_MSG_CONTAINER = 'Open this folder with CudaText';
+
+
 { ============================================================================ }
 { TCudaTextContextMenuHandler                                                  }
 { ============================================================================ }
 
+// Called by Windows Explorer to inform the context menu handler which items
+// are currently selected
 function TCudaTextContextMenuHandler.ShellExtInitialize(pidlFolder: PItemIDList;
   lpdobj: IDataObject; hKeyProgID: HKEY): HRESULT;
 var
@@ -161,81 +188,112 @@ var
 
 begin
   Result := E_FAIL;
+
   FreeAndNil(FFileNames);
+  FStatusbarMessage := '';
 
-  // Check if an object was defined
-  if lpdobj = nil then exit;
+  // check if an object was defined, i.e. user right-clicked a file or folder,
+  // a shortcut to a file or folder or a drive icon
+  if Assigned(lpdobj) then
+  begin
+    // prepare to get information about the object
+    DataFormat.cfFormat := CF_HDROP;
+    DataFormat.ptd      := nil;
+    DataFormat.dwAspect := DVASPECT_CONTENT;
+    DataFormat.lindex   := -1;
+    DataFormat.tymed    := TYMED_HGLOBAL;
 
-  // Prepare to get information about the object
-  DataFormat.cfFormat := CF_HDROP;
-  DataFormat.ptd      := nil;
-  DataFormat.dwAspect := DVASPECT_CONTENT;
-  DataFormat.lindex   := -1;
-  DataFormat.tymed    := TYMED_HGLOBAL;
+    // read data into storage medium backed by a memory buffer
+    if lpdobj.GetData(DataFormat, StrgMedium) <> S_OK then exit;
 
-  if lpdobj.GetData(DataFormat, StrgMedium) <> S_OK then exit;
+    try
+      // get count of data sets in storage medium
+      CntFiles := DragQueryFileW(StrgMedium.hGlobal, $FFFFFFFF, nil, 0);
+      if CntFiles < 1 then exit;
 
-  try
-    CntFiles := DragQueryFileW(StrgMedium.hGlobal, $FFFFFFFF, nil, 0);
-    if CntFiles < 1 then exit;
+      FCudaTextPath := GetCudaTextDir();
+      FFileNames    := TStringList.Create;
 
-    FCudaTextPath := GetCudaTextDir();
-    FFileNames    := TStringList.Create;
+      // read file paths from storage medium and store them in list
+      for Idx := 0 to Pred(CntFiles) do
+      begin
+        FillChar(Buffer, SizeOf(Buffer), 0);
+        DragQueryFileW(StrgMedium.hGlobal, Idx, @Buffer, MAX_PATH);
+        FileName := PWideChar(Buffer);
+        FFileNames.Add(UTF8Encode(FileName));
+      end;
 
-    for Idx := 0 to Pred(CntFiles) do
+      // set statusbar message text
+      FStatusbarMessage := STATUS_BAR_MSG_ITEM;
+
+      Result := S_OK;
+
+    finally
+      ReleaseStgMedium(StrgMedium);
+    end;
+  end
+
+  // check if a containing folder was defined, i.e. user right-clicked
+  // Explorer window background
+  else if Assigned(pidlFolder) then
+  begin
+    FillChar(Buffer, SizeOf(Buffer), 0);
+
+    // convert provided shell item identifier list to folder path
+    // and store it in list
+    if SHGetPathFromIDListW(pidlFolder, @Buffer) then
     begin
-      FillChar(Buffer, SizeOf(Buffer), 0);
-      DragQueryFileW(StrgMedium.hGlobal, Idx, @Buffer, MAX_PATH);
+      FCudaTextPath := GetCudaTextDir();
+      FFileNames    := TStringList.Create;
+
       FileName := PWideChar(Buffer);
       FFileNames.Add(UTF8Encode(FileName));
+
+      // set statusbar message text
+      FStatusbarMessage := STATUS_BAR_MSG_CONTAINER;
+
+      Result := S_OK;
     end;
-
-    Result := NOERROR;
-
-  finally
-    ReleaseStgMedium(StrgMedium);
   end;
 end;
 
 
+// Called by Windows Explorer to determine if and how to display the context
+// menu entry for the currently selected items
 function TCudaTextContextMenuHandler.QueryContextMenu(Menu: HMENU;
   indexMenu, idCmdFirst, idCmdLast, uFlags: UINT): HRESULT;
-const
-  CMF_ITEMMENU     = $00000080;
-  MENU_ITEM_CAPTON = 'Open with CudaText';
-
 var
   ContextMenuItem: TMenuItemInfoW;
-  MenuCaption:     string;
+  MenuCaption:     WideString;
 
 begin
   // only adding one menu context menu item, so generate the result code accordingly
-  Result := MakeResult(SEVERITY_SUCCESS, 0, 1);
-
-  // store the context menu item index
-  FMenuItemIndex := indexMenu;
+  Result := MakeResult(SEVERITY_SUCCESS, FACILITY_NULL, 1);
 
   // specify what the menu says, depending on where it was spawned
-  if (uFlags = CMF_NORMAL) then // from the desktop
-    MenuCaption := MENU_ITEM_CAPTON
+  if (uFlags = CMF_NORMAL) then                            // the default case
+    MenuCaption := UTF8Decode(MENU_ITEM_CAPTON)
 
-  else if (uFlags and CMF_ITEMMENU) = CMF_ITEMMENU  then  // from desktop
-    MenuCaption := MENU_ITEM_CAPTON
+  else if (uFlags and CMF_ITEMMENU) = CMF_ITEMMENU  then   // from file/folder
+    MenuCaption := UTF8Decode(MENU_ITEM_CAPTON)
 
-  else if (uFlags and CMF_VERBSONLY) = CMF_VERBSONLY then // from a shortcut
-    MenuCaption := MENU_ITEM_CAPTON
+  else if (uFlags and CMF_VERBSONLY) = CMF_VERBSONLY then  // from file/folder shortcut
+    MenuCaption := UTF8Decode(MENU_ITEM_CAPTON)
 
-  else if (uFlags and CMF_EXPLORE) = CMF_EXPLORE then // from explorer
-    MenuCaption := MENU_ITEM_CAPTON
+  else if (uFlags and CMF_CANRENAME ) = CMF_CANRENAME then // from file/folder in XP
+    MenuCaption := UTF8Decode(MENU_ITEM_CAPTON)
 
-  else if (uFlags and CMF_CANRENAME ) = CMF_CANRENAME  then // important for XP
-    MenuCaption := MENU_ITEM_CAPTON
+  else if (uFlags and CMF_EXPLORE) = CMF_EXPLORE then      // from folder in explorer tree
+    MenuCaption := UTF8Decode(MENU_ITEM_CAPTON)
+
+  else if (uFlags and CMF_NODEFAULT) = CMF_NODEFAULT then  // from Explorer window background
+    MenuCaption := UTF8Decode(MENU_ITEM_CAPTON)            // when navigation pane is deactivated
 
   else
     // fail for any other value
-    Result := E_FAIL;
+    Result := E_NOTIMPL;
 
-  if Result <> E_FAIL then
+  if Succeeded(Result) then
   begin
     FillChar(ContextMenuItem, SizeOf(ContextMenuItem), 0);
 
@@ -243,8 +301,7 @@ begin
     ContextMenuItem.fMask      := MIIM_FTYPE or MIIM_STRING or MIIM_ID or MIIM_BITMAP;
     ContextMenuItem.fType      := MFT_STRING;
     ContextMenuItem.wID        := idCmdFirst;
-    ContextMenuItem.dwTypeData := PWideChar(UTF8Decode(MenuCaption));
-    ContextMenuItem.hbmpItem   := HBITMAP(HBMMENU_CALLBACK);
+    ContextMenuItem.dwTypeData := PWideChar(MenuCaption);
     ContextMenuItem.cch        := Length(MenuCaption);
 
     // use different approaches for drawing the menu icon bitmap depending on
@@ -258,61 +315,46 @@ begin
       ContextMenuItem.hbmpItem := IconToBitmapPARGB32(FCudaTextPath);
     end;
 
-    InsertMenuItemW(Menu, FMenuItemIndex, True, @ContextMenuItem);
+    InsertMenuItemW(Menu, indexMenu, True, @ContextMenuItem);
   end;
 end;
 
 
+// Called by Windows Explorer to determine the status bar text related to the
+// selected items to be shown in Explorer window
 function TCudaTextContextMenuHandler.GetCommandString(idCmd: UINT_PTR; uFlags: UINT;
   pwReserved: PUINT; pszName: LPSTR; cchMax: UINT): HRESULT;
-const
-  StatusbarMessage = 'Open selected file(s) with CudaText';
-
 begin
   Result := E_INVALIDARG;
 
-  // Set help string on the Explorer status bar when the menu item is selected
-  if (idCmd = 0) and (uFlags = GCS_HELPTEXT) then
-  begin
-    WideCharToMultiByte(CP_ACP, 0,
-                        PWideChar(UTF8Decode(StatusbarMessage)), Length(StatusbarMessage),
-                        PChar(pszName), cchMax * SizeOf(AnsiChar),
-                        nil, nil
-                       );
+  // process only our one-and-only menu entry
+  if idCmd <> 0 then exit;
 
-    Result := NOERROR;
+  // set help string on Explorer status bar when menu item is mouse-hovered
+  case uFlags of
+    // Explorer requests unicode string
+    GCS_HELPTEXTW:
+    begin
+      StrCopy(PWideChar(pszName), PWideChar(UTF8Decode(FStatusbarMessage)));
+      Result := S_OK;
+    end;
+
+    // Explorer requests ANSI string
+    GCS_HELPTEXTA:
+    begin
+      WideCharToMultiByte(CP_ACP, 0,
+                          PWideChar(UTF8Decode(FStatusbarMessage)), -1,
+                          pszName, cchMax * SizeOf(AnsiChar),
+                          nil, nil
+                         );
+      Result := S_OK;
+    end;
   end;
 end;
 
 
-function TCudaTextContextMenuHandler.InvokeCommand(var lpici: TCMInvokeCommandInfo): HRESULT;
-begin
-  Result := E_FAIL;
-
-  // exit if lpici.lpVerb is a pointer
-  if not IS_INTRESOURCE(PChar(lpici.lpVerb)) then exit;
-
-  // retrieve the clicked menu item by its offset to the first added menu item
-  case LoWord(NativeInt(lpici.lpVerb)) of
-    0:
-    begin
-      if not Assigned(FFileNames) then exit;
-
-      try
-        OpenWithCudaText(lpici.HWND, FFileNames);
-        FreeAndNil(FFileNames);
-
-      except
-        on E: Exception do
-          MessageBoxW(lpici.hwnd, PWideChar(UTF8Decode(E.Message)), nil, MB_ICONERROR);
-      end;
-
-      Result := NOERROR;
-    end;
-  end
-end;
-
-
+// The following two methods are called by Windows Explorer to send Windows
+// messages regarding the context menu entry to the context menu handler
 function TCudaTextContextMenuHandler.HandleMenuMsg(uMsg: UINT; wParam: WPARAM; lParam: LPARAM): HRESULT;
 var
   NotUsed: LRESULT;
@@ -388,7 +430,42 @@ begin
 end;
 
 
-procedure TCudaTextContextMenuHandler.OpenWithCudaText(Handle: HWND; FileNames: TStrings);
+// Called by Windows Explorer when the context menu entry has been clicked
+function TCudaTextContextMenuHandler.InvokeCommand(var lpici: TCMInvokeCommandInfo): HRESULT;
+begin
+  Result := E_FAIL;
+
+  // exit if lpici.lpVerb is a pointer
+  if not IS_INTRESOURCE(PChar(lpici.lpVerb)) then exit;
+
+  // retrieve the clicked menu item by its offset to the first added menu item
+  case LoWord(NativeInt(lpici.lpVerb)) of
+    0:
+    begin
+      if not Assigned(FFileNames) then exit;
+
+      try
+        OpenWithCudaText(lpici.HWND, lpici.nShow, FFileNames);
+
+        FreeAndNil(FFileNames);
+        FStatusbarMessage := '';
+
+      except
+        on E: Exception do
+          MessageBoxW(lpici.hwnd, PWideChar(UTF8Decode(E.Message)), nil, MB_ICONERROR);
+      end;
+
+      Result := S_OK;
+    end;
+  end
+end;
+
+
+// Internal method to open all items selected in Explorer window with CudaText.
+// To improve performance, CudaText is started with packets of 125 file paths
+// at maximum in order to comply with the command line length limit of 32768
+// characters.
+procedure TCudaTextContextMenuHandler.OpenWithCudaText(Handle: HWND; SW_Mode: longint; FileNames: TStrings);
 var
   Idx:          integer;
   FileNameList: string;
@@ -407,14 +484,15 @@ begin
 
     if (Idx mod 126 = 0) or (Idx = FileNames.Count) then
     begin
-      Execute(Handle, FCudaTextPath, FileNameList);
+      Execute(Handle, SW_Mode, FCudaTextPath, FileNameList);
       FileNameList := '';
     end;
   end;
 end;
 
 
-function TCudaTextContextMenuHandler.Execute(Handle: HWND; const AFile: string; var Params: string): boolean;
+// Internal method for wrapping Win32 CreateProcess API
+function TCudaTextContextMenuHandler.Execute(Handle: HWND; SW_Mode: longint; const AFile: string; var Params: string): boolean;
 var
   si: Windows.TStartupInfoW;
   pi: TProcessInformation;
@@ -427,7 +505,7 @@ begin
 
   si.cb          := SizeOf(si);
   si.dwFlags     := STARTF_USESHOWWINDOW;
-  si.wShowWindow := SW_SHOWNORMAL;
+  si.wShowWindow := WORD(SW_Mode);
 
   if not CreateProcessW(nil,
                         PWideChar('"' + UTF8Decode(AFile) + '" ' + UTF8Decode(Params)),
@@ -443,6 +521,7 @@ begin
 end;
 
 
+// Internal method to dynamically load certain UxTheme functions
 procedure TCudaTextContextMenuHandler.InitUXThemeFuncs;
 var
   hUxTheme: HMODULE;
@@ -456,6 +535,9 @@ begin
 end;
 
 
+// Internal method to convert the icon of an executable file to 32 bpp ARGB
+// (i.e. RGB with alpha channel) bitmap format, the format required for Explorer
+// context menu icons in Windows Vista and later
 function TCudaTextContextMenuHandler.IconToBitmapPARGB32(const FilePath: string): HBITMAP;
 var
   hr:          HRESULT;
@@ -515,11 +597,11 @@ begin
         begin
           if DrawIconEx(hdcBuffer, 0, 0, hdIcon, sizIcon.cx, sizIcon.cy, 0, 0, DI_NORMAL) then
           begin
-            // If icon did not have an alpha channel, we need to convert buffer to PARGB.
+            // if icon did not have an alpha channel, we need to convert buffer to PARGB.
             hr := ConvertBufferToPARGB32(hPaintBuf, hdcDest, hdIcon, sizIcon);
           end;
 
-          // This will write the buffer contents to the destination bitmap.
+          // this will write the buffer contents to the destination bitmap.
           pfnEndBufferedPaint(hPaintBuf, true);
         end;
 
@@ -539,6 +621,8 @@ begin
 end;
 
 
+// Internal method to create a device independent bitmap (DIB) where the context
+// menu entry's icon can be drawn to
 function TCudaTextContextMenuHandler.Create32BitHBITMAP(hdcDest: HDC; const sizBmp: TSize; out pvBits: Pointer; out hBmp: HBITMAP): HRESULT;
 var
   bmi:     BITMAPINFO;
@@ -569,6 +653,8 @@ begin
 end;
 
 
+// Check if the bitmap in a given UxTheme paint buffer has an alpha channel.
+// If not convert it to 32 bpp ARGB format.
 function TCudaTextContextMenuHandler.ConvertBufferToPARGB32(hPaintBuf: HPAINTBUFFER; hdcDest: HDC; hSrcIcon: HICON; const sizIcon: TSize): HRESULT;
 var
   pBufPix:  PRGBQUAD;
@@ -601,6 +687,7 @@ begin
 end;
 
 
+// Internal method to convert the pixels of a 32 bpp bitmap to ARGB format
 function TCudaTextContextMenuHandler.ConvertToPARGB32(hdcDest: HDC; pBufARGB: PARGB; hbmp: HBITMAP; const sizImage: TSize; cxRow: integer): HRESULT;
 var
   bmi:       BITMAPINFO;
@@ -662,6 +749,7 @@ begin
 end;
 
 
+// Internal method to check if the pixels of a 32 bpp bitmap have an alpha channel
 function TCudaTextContextMenuHandler.HasAlpha(pBufARGB: PARGB; const sizImage: TSize; cxRow: integer): boolean;
 var
   cxDelta: ULONG;
@@ -691,6 +779,7 @@ begin
 end;
 
 
+// Internal method to initialize a BITMAPINFO structure
 procedure TCudaTextContextMenuHandler.InitBitmapInfo(out bmi: BITMAPINFO; cx, cy: LONG; bpp: WORD);
 begin
   FillChar(bmi, SizeOf(bmi), 0);
@@ -705,6 +794,7 @@ begin
 end;
 
 
+// Internal method to retrieve the small version of an executable's icon
 function TCudaTextContextMenuHandler.GetCudaTextIcon(const CudaTextPath: string; out IconHandle: HICON): boolean;
 var
   ShellFileInfo: TSHFileInfoW;
@@ -724,6 +814,8 @@ begin
 end;
 
 
+// Internal method to retrive the path to the directory of the context menu
+// handler's DLL file. This should be the same as CudaText's directory.
 function TCudaTextContextMenuHandler.GetCudaTextDir: string;
 var
   szBuf:    array of WideChar;
@@ -740,11 +832,11 @@ begin
     SetLength(szBuf, dwBufLen);
     dwRet := GetModuleFileNameW(HInstance, PWideChar(szBuf), dwBufLen);
 
-    // If dwRet is 0 there was an error
+    // if dwRet is 0 there was an error
     //   => leave loop
     // if dwRet is less than dwBufLen the buffer size was sufficient
     //   => leave loop
-    // If dwRet is equal to dwBufLen the buffer size was too small
+    // if dwRet is equal to dwBufLen the buffer size was too small
     //   => loop and retry with double sized buffer
     // dwRet greater than dwBufLen is a non-existing case
     if dwRet < dwBufLen then break;
@@ -765,9 +857,16 @@ end;
 { TCudaTextContextMenuHandlerObjectFactory                                     }
 { ============================================================================ }
 
+// Overridden method of the context menu handler's class factory.
+// On installing the context menu handler, create the required registry keys
+// to show the context menu handler's menu entries in Explorer.
+// On uninstalling the context menu handler, delete these registry keys.
 procedure TCudaTextContextMenuHandlerObjectFactory.UpdateRegistry(DoRegister: Boolean);
 const
-  ContextKey = '*\shellex\ContextMenuHandlers\%s';
+  FileContextKey  = '*\shellex\ContextMenuHandlers\%s';
+  DirContextKey   = 'Directory\shellex\ContextMenuHandlers\%s';
+  DirBgContextKey = 'Directory\Background\shellex\ContextMenuHandlers\%s';
+  DriveContextKey = 'Drive\shellex\ContextMenuHandlers\%s';
 
 begin
   // perform normal registration
@@ -776,14 +875,26 @@ begin
   // if this server is being registered, register the required key/values
   // to expose it to Explorer
   if DoRegister then
-    CreateRegKey(Format(ContextKey, [ClassName]), '', GUIDToString(ClassID), HKEY_CLASSES_ROOT)
+  begin
+    CreateRegKey(Format(FileContextKey,  [ClassName]), '', GUIDToString(ClassID), HKEY_CLASSES_ROOT);
+    CreateRegKey(Format(DirContextKey,   [ClassName]), '', GUIDToString(ClassID), HKEY_CLASSES_ROOT);
+    CreateRegKey(Format(DirBgContextKey, [ClassName]), '', GUIDToString(ClassID), HKEY_CLASSES_ROOT);
+    CreateRegKey(Format(DriveContextKey, [ClassName]), '', GUIDToString(ClassID), HKEY_CLASSES_ROOT);
+  end
   else
-    DeleteRegKey(Format(ContextKey, [ClassName]));
+  begin
+    DeleteRegKey(Format(FileContextKey,  [ClassName]));
+    DeleteRegKey(Format(DirContextKey,   [ClassName]));
+    DeleteRegKey(Format(DirBgContextKey, [ClassName]));
+    DeleteRegKey(Format(DriveContextKey, [ClassName]));
+  end;
 end;
 
 
 
 initialization
+  // on DLL initialization, create an instance of the class factory required to
+  // instantiate the context menu handler's COM server
   TCudaTextContextMenuHandlerObjectFactory.Create(ComServer, TCudaTextContextMenuHandler,
                                                   CLASS_CudaTextContextMenuHandler,
                                                   ciMultiInstance, tmApartment);
