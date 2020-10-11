@@ -1,3 +1,25 @@
+:: ****************************************************************************
+::
+:: Uninstaller for CudaText context menu handler for 32 bit Windows Explorer
+::
+:: Author:  Andreas Heim, 2019-2020
+:: Website: https://github.com/dinkumoil/cuda_shell_extension
+::
+::
+:: In case (de-)installation doesn't work successfully on your machine
+:: have a look at the project's website to obtain detailed instructions
+:: on how to do it manually.
+::
+::
+:: This program is free software; you can redistribute it and/or modify
+:: it under the terms of the Mozilla Public License Version 2.0.
+::
+:: This program is distributed in the hope that it will be useful,
+:: but WITHOUT ANY WARRANTY; without even the implied warranty of
+:: MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+::
+:: ****************************************************************************
+
 @echo off & setlocal
 
 ::------------------------------------------------------------------------------
@@ -52,7 +74,7 @@ exit /b 0
 
 
 :RestartElevated
-  ::Get system's ANSI and OEM code page and set console's code page to ANSI code page
+  ::Get system's ANSI and OEM code page and set console's code page to ANSI code page.
   ::This is required if this script is stored in a path that contains characters
   ::with different code points in those code pages.
   for /f "tokens=2 delims==" %%a in ('wmic OS get CodeSet /format:list') do set /a "ACP=%%~a"
@@ -62,7 +84,7 @@ exit /b 0
   > "%ElevateScript%" echo.Set objShell = CreateObject("Shell.Application")
   >>"%ElevateScript%" echo.
   >>"%ElevateScript%" echo.strApplication = "cmd.exe"
-  >>"%ElevateScript%" echo.strArguments   = "/c """"%~1"" %~2"""
+  >>"%ElevateScript%" echo.strArguments   = "/c ""%~1"""
   >>"%ElevateScript%" echo.
   >>"%ElevateScript%" echo.objShell.ShellExecute strApplication, strArguments, "", "runas", 1
 
