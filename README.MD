@@ -16,7 +16,7 @@ Additionally you are able to open a folder and even a whole drive with _CudaText
 
 # Known issues
 
-When Windows Explorer is compositing the context menu of **a drive or a folder right-clicked in a window's navigation pane** (the folder tree structure at the left side of an Explorer window), for what ever reason the context menu handler's COM interface is called twice. Thus, in the context menu of the items mentioned aforehand there will be two _CudaText_ entries. Since both of these entries work as expected, this is only a minor flaw I won't fix.
+When Windows Explorer is compositing the context menu of **a drive or a folder right-clicked in a window's navigation pane** (the folder tree structure at the left side of an Explorer window), for whatever reason the context menu handler's COM interface is called twice. Thus, in the context menu of the items mentioned aforehand there will be two _CudaText_ entries. Since both of these entries work as expected, this is only a minor flaw I won't fix.
 
 
 # Installation
