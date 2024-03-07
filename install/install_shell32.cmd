@@ -28,6 +28,9 @@
 ::Path for temporary elevation script
 set "ElevateScript=%Temp%\ElevateCudaTextShellInstaller.vbs"
 
+::Path for temporary script to retrieve system's ANSI code page
+set "GetAnsiCodePageScript=%Temp%\GetAnsiCodePage.vbs"
+
 ::Name of context menu handler DLL file
 set "ShellHandler=cudatext_shell32.dll"
 
@@ -77,7 +80,7 @@ exit /b 0
   ::Get system's ANSI and OEM code page and set console's code page to ANSI code page.
   ::This is required if this script is stored in a path that contains characters
   ::with different code points in those code pages.
-  for /f "tokens=2 delims==" %%a in ('wmic OS get CodeSet /format:list') do set /a "ACP=%%~a"
+  call :GetAnsiCodePage
   for /f "tokens=2 delims=.:" %%a in ('chcp') do set /a "OEMCP=%%a"
   if "%ACP%" neq "" if "%ACP%" neq "0" chcp %ACP% > NUL
 
@@ -92,4 +95,15 @@ exit /b 0
   if "%OEMCP%" neq "" if "%OEMCP%" neq "0" chcp %OEMCP% > NUL
 
   cscript /nologo "%ElevateScript%"
+exit /b 0
+
+
+:GetAnsiCodePage
+  > "%GetAnsiCodePageScript%" echo.Set objWMI = GetObject("winmgmts:root\cimv2:Win32_OperatingSystem=@")
+  >>"%GetAnsiCodePageScript%" echo.WScript.Echo objWMI.CodeSet
+
+  set "ACP="
+  for /f "delims=" %%a in ('cscript.exe /nologo "%GetAnsiCodePageScript%" 2^>NUL') do set "ACP=%%~a"
+
+  del "%GetAnsiCodePageScript%"
 exit /b 0
