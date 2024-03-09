@@ -570,13 +570,13 @@ begin
 
   if hdcDest <> 0 then
   begin
-    hr := Create32BitHBITMAP(hdcDest, sizIcon, pvBits, hbmp);
+    hr := Create32BitHBITMAP(hdcDest, sizIcon, pvBits, hBmp);
 
     if SUCCEEDED(hr) then
     begin
       hr := E_FAIL;
 
-      hbmpOld := SelectObject(hdcDest, hbmp);
+      hbmpOld := SelectObject(hdcDest, hBmp);
 
       if hbmpOld <> 0 then
       begin
