@@ -71,7 +71,7 @@ exit /b 0
 ::==============================================================================
 
 :CheckForAdminPermissions
-  net session 1>NUL 2>&1
+  fltmc 1>NUL 2>&1
   if ERRORLEVEL 1 exit /b 1
 exit /b 0
 
@@ -107,3 +107,4 @@ exit /b 0
 
   del "%GetAnsiCodePageScript%"
 exit /b 0
+
